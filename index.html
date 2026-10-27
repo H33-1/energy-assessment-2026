@@ -6,22 +6,18 @@ document.getElementById('manualSave').onclick=()=>frame.contentDocument.getEleme
 </script><script>/* 통합 활동지의 Google Sheets 연결 계층. 브라우저 저장은 연결 실패 시에도 유지합니다. */
 (function(){
 'use strict';
-const DEFAULT_CONNECTION={url:'https://script.google.com/macros/s/AKfycbxl2lIw77J7OvQERHad-Fg6f7LT5JlUiwmsSx4OhXcDFNP6kLV6qh1Wcu1a_cnpAGM/exec',code:''};
-let config;try{config=JSON.parse(localStorage.getItem('energyCloudConfig')||'null')||DEFAULT_CONNECTION;}catch(error){config=DEFAULT_CONNECTION;}
-const button=document.createElement('button');button.id='cloudSettings';button.textContent='수업 코드';document.querySelector('nav').append(button);
+const DEFAULT_CONNECTION={url:'https://script.google.com/macros/s/AKfycbxl2lIw77J7OvQERHad-Fg6f7LT5JlUiwmsSx4OhXcDFNP6kLV6qh1Wcu1a_cnpAGM/exec'};
+const config=DEFAULT_CONNECTION;
 const state=document.createElement('span');state.id='cloudState';state.style.cssText='font-size:12px;flex-basis:100%;text-align:center;color:#625075';document.querySelector('nav').append(state);
-const settings=document.createElement('dialog');settings.id='cloudDialog';settings.style.cssText='border:1px solid #bda5d3;border-radius:16px;padding:20px;width:min(94vw,600px)';settings.innerHTML='<h2>구글 시트 연결</h2><p>선생님이 알려준 수업 연결 코드를 입력하세요.</p><label hidden>웹 앱 주소<input id="cloudUrl" type="url" style="display:block;width:100%;margin:8px 0;padding:10px" placeholder="https://script.google.com/macros/s/…/exec"></label><label>수업 연결 코드<input id="cloudCode" type="password" style="display:block;width:100%;margin:8px 0;padding:10px"></label><p id="cloudError" role="status"></p><button id="cloudApply">연결 저장</button> <button id="cloudCancel">닫기</button>';document.body.append(settings);
-function configured(){return /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(config.url)&&!!config.code;}
-function renderState(text){state.textContent=text||(configured()?'구글 시트 연결 대기':'수업 코드를 입력하면 시트에 연결됩니다 · 기기 임시저장은 유지됩니다');}
-button.onclick=()=>{settings.querySelector('#cloudUrl').value=config.url;settings.querySelector('#cloudCode').value=config.code;settings.showModal();};settings.querySelector('#cloudCancel').onclick=()=>settings.close();
-settings.querySelector('#cloudApply').onclick=()=>{const next={url:settings.querySelector('#cloudUrl').value.trim(),code:settings.querySelector('#cloudCode').value.trim()};if(!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(next.url)||!next.code){settings.querySelector('#cloudError').textContent='끝이 /exec인 웹 앱 주소와 연결 코드를 확인해 주세요.';return;}config=next;localStorage.setItem('energyCloudConfig',JSON.stringify(config));lastDigest='';settings.close();if(pendingTarget)window.requestPageNavigation(pendingTarget);else queueSave();refreshPeers();renderState();};
+function configured(){return /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(config.url);}
+function renderState(text){state.textContent=text||'작성하면 구글 시트에 자동 저장됩니다.';}
 function read(key){try{return JSON.parse(localStorage.getItem(key)||'null');}catch(error){return null;}}
 function collect(){const pages={};for(let i=1;i<=6;i++){const data=read('page'+i+'Data');if(data)pages['page'+i]=data;}return pages;}
 function student(){return read('page1Data')||read('energyAssessmentStudent')||{};}
 function identified(){const s=student();return s.school&&s.grade&&(s.classNumber||s.classNo)&&(s.studentNumber||s.number)&&(s.studentName||s.name)&&(s.groupNumber||s.group);}
 function digest(pages){const copy=JSON.parse(JSON.stringify(pages));for(const key of ['member1','member2','member3','member4'])if(copy.page2)delete copy.page2[key];for(const key of ['before','reflection1','reflection2','reflection3','reflection4'])if(copy.page6)delete copy.page6[key];return JSON.stringify(copy);}
 let queue=Promise.resolve(),timer,lastDigest='',submitting=false,attempt=null;
-function post(data){const run=async()=>{const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),60000);try{const response=await fetch(config.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({...data,code:config.code}),redirect:'follow',credentials:'omit',signal:controller.signal});const result=await response.json();if(!result.ok)throw Error(result.error||'시트 저장 실패');return result;}finally{clearTimeout(timeout);}};const request=queue.catch(()=>{}).then(run);queue=request.catch(()=>{});return request;}
+function post(data){const run=async()=>{const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),60000);try{const response=await fetch(config.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(data),redirect:'follow',credentials:'omit',signal:controller.signal});const result=await response.json();if(!result.ok)throw Error(result.error||'시트 저장 실패');return result;}finally{clearTimeout(timeout);}};const request=queue.catch(()=>{}).then(run);queue=request.catch(()=>{});return request;}
 function requestId(){return (crypto.randomUUID?crypto.randomUUID():Date.now()+'_'+Math.random().toString(36).slice(2)).replace(/-/g,'_');}
 async function sync(action,pages,force=false){
  if(!configured())throw Error('먼저 시트 연결을 설정해 주세요.');if(!identified())throw Error('첫 페이지의 학생 정보와 모둠을 작성해 주세요.');
@@ -36,18 +32,18 @@ function applyPeers(peers){const win=frame.contentWindow;if(current==='page2'&&t
 let reading=false;async function refreshPeers(){if(!configured()||!identified()||reading||document.hidden||!['page2','page6'].includes(current))return;reading=true;try{const response=await post({action:'peers',student:student()});applyPeers(response.peers||[]);}catch(error){renderState('모둠원 생각을 불러오지 못했습니다. 다음 갱신 때 다시 시도합니다.');}finally{reading=false;}}
 window.addEventListener('message',e=>{if(e.source!==frame.contentWindow)return;if(e.data?.kind==='draft'&&String(e.data.text).includes('임시저장 완료'))queueSave();if(e.data?.kind==='navigate'){queueSave();setTimeout(refreshPeers,300);}});
 frame.addEventListener('load',refreshPeers);setInterval(refreshPeers,15000);window.addEventListener('online',queueSave);
-let navigating=false,pendingTarget='';
+let navigating=false;
 window.requestPageNavigation=async function(target){
  const next=order[order.indexOf(current)+1];
  if(target!==next||target==='complete'){openPage(target);return;}
  if(navigating||submitting)return;
- if(!configured()){pendingTarget=target;renderState('수업 코드를 입력하면 이 페이지를 저장하고 이동합니다.');button.click();settings.querySelector('#cloudError').textContent='페이지를 저장하려면 수업 코드를 입력해 주세요.';return;}
+ if(!configured()){renderState('시트 연결 주소를 확인해 주세요.');return;}
  navigating=true;clearTimeout(timer);frame.inert=true;
  const controls=[...document.querySelectorAll('nav button,nav select,#manualSave')];const disabled=controls.map(el=>el.disabled);controls.forEach(el=>el.disabled=true);
  const status=frame.contentDocument?.getElementById('status');
  try{
   const win=frame.contentWindow;const saved=typeof win.saveDraft==='function'?win.saveDraft():typeof win.save==='function'?win.save():false;if(!saved)throw Error('기기 저장에 실패했습니다.');
-  await sync('save',collect(),true);pendingTarget='';openPage(target);
+  await sync('save',collect(),true);openPage(target);
  }catch(error){const text='저장하지 못해 이 페이지에 머물렀습니다. 답안은 기기에 남아 있습니다. '+error.message;renderState(text);if(status)status.textContent=text;}
  finally{navigating=false;frame.inert=false;controls.forEach((el,i)=>el.disabled=disabled[i]);document.getElementById('previous').disabled=current==='index';document.getElementById('forward').disabled=current==='complete';}
 };
